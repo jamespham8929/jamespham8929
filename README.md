@@ -27,10 +27,10 @@ flowchart LR
   GITOPS -->|"http_requests_total"| PROM
   PROM -->|"canary analysis"| GITOPS
   PROM -->|"burn rate"| SLO
+  SLO -->|"PrometheusRule"| OBS
   PROM -->|"steady-state probe"| CHAOS
   AM -->|"critical → PagerDuty"| INC
   TF -.->|"same AWS account"| COST
-  SLO -.->|"same rule names"| OBS
   GITOPS -.->|"deploy events"| INC
 ```
 
@@ -67,11 +67,18 @@ promhttp convention. observability-bootstrap enforces it: a dashboard that
 queries a label nothing produces fails CI, which is how the last disagreement
 between these repos got found.
 
-**One record name, two producers.** k8s-slo-tracker's `generate-alerts` and
-observability-bootstrap's Helm chart both emit
-`slo:sli_error:ratio_rate{window}` with `service`, `slo`, and `namespace` labels,
-and three of their four burn-rate tiers are identical (14.4x over 1h/5m, 6x over
-6h/30m, 1x over 3d/6h). Rules from either side land on the same series names.
+**One record name, two producers.** `slo-tracker generate-alerts | kubectl apply
+-f -` installs into the stack observability-bootstrap builds. Both emit
+`slo:sli_error:ratio_rate{window}` under the same labels, both name their alerts
+`SLOErrorBudgetBurnCritical` and `SLOErrorBudgetBurnWarning`, and three of their
+four burn-rate tiers are identical (14.4x over 1h/5m, 6x over 6h/30m, 1x over
+3d/6h). The generated manifest carries the `release` label the operator selects
+on and the `team` label Alertmanager routes on, so the same routing, inhibition,
+and runbooks apply whichever side the rules came from.
+
+What does not carry across is the confidence gating. PromQL cannot express a
+Wilson lower bound, so exported rules behave like the textbook method, and the
+low-traffic judgement stays in the tracker's own evaluate path.
 
 **One Prometheus address.** chaos-operator's experiments point at
 `prometheus-operated.monitoring:9090` and the gitops canary analysis points at
@@ -88,13 +95,13 @@ terraform-aws-modules provisions.
 
 ## Where they don't line up, yet
 
-Being explicit about this is the point of the page. Four things speak the same
-language and are not connected:
+Being explicit about this is the point of the page. Four things are still loose:
 
-1. **k8s-slo-tracker's generated rules are never installed.** It writes a
-   Prometheus rules file that observability-bootstrap could apply as a
-   PrometheusRule, and nothing does it. The two also define the error ratio
-   slightly differently, non-2xx against 5xx, which would need settling first.
+1. **The two sides still define the error ratio differently.** k8s-slo-tracker
+   counts anything that is not a 2xx, observability-bootstrap counts 5xx, so a
+   burst of 404s burns budget under one and not the other. The tracker takes its
+   definition from each SLO's configured queries now, so settling this is a
+   config change rather than a code change, but nothing settles it today.
 2. **The delivery pipeline emits no deploy events.** incident-cli reads the
    GitHub Deployments API, and gitops-platform-demo's promotion workflow opens a
    PR and lets ArgoCD sync without recording a deployment. One API call in the
