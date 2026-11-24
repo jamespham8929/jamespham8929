@@ -29,6 +29,9 @@ flowchart LR
   PROM -->|"burn rate"| SLO
   SLO -->|"PrometheusRule"| OBS
   PROM -->|"steady-state probe"| CHAOS
+  CHAOS -->|"chaos_* run metrics"| PROM
+  SLO -->|"gated decisions"| PROM
+  PROM -->|"metric anomalies"| INC
   AM -->|"critical → PagerDuty"| INC
   TF -.->|"same AWS account"| COST
   GITOPS -.->|"deploy events"| INC
@@ -77,8 +80,16 @@ on and the `team` label Alertmanager routes on, so the same routing, inhibition,
 and runbooks apply whichever side the rules came from.
 
 What does not carry across is the confidence gating. PromQL cannot express a
-Wilson lower bound, so exported rules behave like the textbook method, and the
-low-traffic judgement stays in the tracker's own evaluate path.
+Wilson lower bound, so exported rules behave like the textbook method. The
+tracker closes that gap with `slo-tracker serve`, a daemon that runs the gated
+engine every minute and exports each decision as a metric.
+`generate-alerts --engine gated` then writes alerts that read the decision,
+under the same names and labels, so the routing above does not change.
+
+**One Prometheus, read and written by everyone.** chaos-operator now exports
+its runs, aborts, and missed schedule slots, so an experiment shows up in the
+stack it is testing. incident-cli reads Prometheus too. A sustained shift in a
+saturation or dependency metric becomes a candidate cause on the timeline.
 
 **One Prometheus address.** chaos-operator's experiments point at
 `prometheus-operated.monitoring:9090` and the gitops canary analysis points at
@@ -106,9 +117,9 @@ Being explicit about this is the point of the page. Four things are still loose:
    GitHub Deployments API, and gitops-platform-demo's promotion workflow opens a
    PR and lets ArgoCD sync without recording a deployment. One API call in the
    promotion job closes this, and it is the highest-value connection left.
-3. **chaos-operator exports no metrics of its own.** It reads Prometheus and
-   writes nothing back, so an experiment is invisible to the stack it is
-   testing.
+3. **A chaos run is not an event yet.** chaos-operator exports its runs as
+   metrics, but incident-cli does not read them as candidate causes. An
+   incident caused by a scheduled experiment would be blamed on something else.
 4. **Nothing runs the loop end to end.** Each repo has its own kind-based demo.
    A `platform-demo` that installs the stack, ships a service, breaks it,
    watches the SLO react, and triages the result with the CLI is the artifact
