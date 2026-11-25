@@ -1,8 +1,9 @@
 # SRE platform
 
-Seven repositories that were built separately and describe one system: provision
+Eight repositories that were built separately and describe one system: provision
 a cluster, install the observability stack, ship a service through it, prove the
-service survives failure, notice when it stops, and triage what changed.
+service survives failure, notice when it stops, and triage what changed. The
+last one checks how often an AI investigator gets the triage right.
 
 This page is the map. Each repo stands alone and is linked below, but the
 interesting part is where they meet, so this page is mostly about the seams.
@@ -18,6 +19,7 @@ flowchart LR
   SLO["k8s-slo-tracker"]
   INC["incident-cli"]
   COST["cloud-cost-analyzer"]
+  MCP["platform-mcp"]
   PROM[("Prometheus")]
   AM["Alertmanager"]
 
@@ -34,6 +36,9 @@ flowchart LR
   SLO -->|"gated decisions"| PROM
   PROM -->|"metric anomalies"| INC
   AM -->|"critical → PagerDuty"| INC
+  INC -->|"investigate v1 JSON"| MCP
+  CHAOS -->|"run records"| MCP
+  PROM -->|"gated decisions"| MCP
   TF -.->|"same AWS account"| COST
   GITOPS -.->|"deploy events"| INC
 ```
@@ -53,6 +58,7 @@ in full further down.
 | [chaos-operator](https://github.com/jamespham8929/chaos-operator) | A chaos operator built safety-first: steady-state verification and blast-radius guards | [ADR 0001](https://github.com/jamespham8929/chaos-operator/blob/main/docs/adr/0001-steady-state-as-a-statistical-claim.md), steady state as a statistical claim |
 | [incident-cli](https://github.com/jamespham8929/incident-cli) | Reconstructs an incident timeline and ranks what probably caused it | `internal/timeline/correlator.go` and the ranking benchmark |
 | [cloud-cost-analyzer](https://github.com/jamespham8929/cloud-cost-analyzer) | Rightsizing that sizes from the recurring peak instead of an average or a p95 | `cloud_cost_analyzer/temporal_rightsizing.py` |
+| [platform-mcp](https://github.com/jamespham8929/platform-mcp) | Read-only MCP tools over the platform, and an eval that grades AI incident investigators | [ADR 0002](https://github.com/jamespham8929/platform-mcp/blob/main/docs/adr/0002-grading-investigators.md), how an investigator is graded against a baseline |
 
 ## Where the seams line up
 
@@ -96,6 +102,14 @@ saturation or dependency metric becomes a candidate cause on the timeline.
 status, with an ID like `payments/nightly/20261124T030005Z`. incident-cli reads
 those records as candidate causes, under the same ID. So a page during a game
 day names the experiment, and the run can be looked up from the timeline.
+
+**One contract for agents.** incident-cli can print its ranking as versioned
+JSON (`incident-cli/investigate/v1`). platform-mcp runs the real binary and
+serves that result to agents as an MCP tool, next to the chaos run records and
+the SLO decisions. Every item has an evidence ID, so each claim in an agent's
+answer can be checked. CI builds incident-cli from main and runs the baseline
+through MCP. It fails if any planted cause ranks differently from the
+benchmark.
 
 **One Prometheus address.** chaos-operator's experiments point at
 `prometheus-operated.monitoring:9090` and the gitops canary analysis points at
@@ -145,3 +159,6 @@ If you only open a few files, these are the ones where the reasoning is visible:
 5. [Sizing from the recurring peak](https://github.com/jamespham8929/cloud-cost-analyzer/blob/main/docs/adr/0001-size-from-recurring-peak.md),
    and why an overall p95 waves through a downsize that the daily spike will not
    fit into.
+6. [Grading incident investigators](https://github.com/jamespham8929/platform-mcp/blob/main/docs/adr/0002-grading-investigators.md).
+   How an AI agent is scored on incidents with a known cause, and why the
+   synthetic set favors the baseline.
