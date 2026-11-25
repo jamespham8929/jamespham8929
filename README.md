@@ -3,7 +3,8 @@
 Eight repositories that were built separately and describe one system: provision
 a cluster, install the observability stack, ship a service through it, prove the
 service survives failure, notice when it stops, and triage what changed. The
-last one checks how often an AI investigator gets the triage right.
+last one breaks the others on purpose and checks how often an AI investigator
+gets the triage right.
 
 This page is the map. Each repo stands alone and is linked below, but the
 interesting part is where they meet, so this page is mostly about the seams.
@@ -39,6 +40,8 @@ flowchart LR
   INC -->|"investigate v1 JSON"| MCP
   CHAOS -->|"run records"| MCP
   PROM -->|"gated decisions"| MCP
+  GITOPS -->|"service and chart for the gym"| MCP
+  OBS -->|"stack for the gym"| MCP
   TF -.->|"same AWS account"| COST
   GITOPS -.->|"deploy events"| INC
 ```
@@ -58,7 +61,7 @@ in full further down.
 | [chaos-operator](https://github.com/jamespham8929/chaos-operator) | A chaos operator built safety-first: steady-state verification and blast-radius guards | [ADR 0001](https://github.com/jamespham8929/chaos-operator/blob/main/docs/adr/0001-steady-state-as-a-statistical-claim.md), steady state as a statistical claim |
 | [incident-cli](https://github.com/jamespham8929/incident-cli) | Reconstructs an incident timeline and ranks what probably caused it | `internal/timeline/correlator.go` and the ranking benchmark |
 | [cloud-cost-analyzer](https://github.com/jamespham8929/cloud-cost-analyzer) | Rightsizing that sizes from the recurring peak instead of an average or a p95 | `cloud_cost_analyzer/temporal_rightsizing.py` |
-| [platform-mcp](https://github.com/jamespham8929/platform-mcp) | Read-only MCP tools over the platform, and an eval that grades AI incident investigators | [ADR 0002](https://github.com/jamespham8929/platform-mcp/blob/main/docs/adr/0002-grading-investigators.md), how an investigator is graded against a baseline |
+| [platform-mcp](https://github.com/jamespham8929/platform-mcp) | Read-only MCP tools over the platform, and an incident gym that grades AI investigators on real faults | [ADR 0003](https://github.com/jamespham8929/platform-mcp/blob/main/docs/adr/0003-incident-gym.md), recording incidents on kind and replaying them in CI |
 
 ## Where the seams line up
 
@@ -111,6 +114,15 @@ answer can be checked. CI builds incident-cli from main and runs the baseline
 through MCP. It fails if any planted cause ranks differently from the
 benchmark.
 
+**One gym.** platform-mcp's incident gym runs five of these repos together on
+kind. observability-bootstrap's stack watches a shop built from
+gitops-platform-demo's service and chart. chaos-operator breaks it, a
+Prometheus rule pages, and incident-cli ranks the causes through MCP. The gym
+records the raw samples, and CI replays them without a cluster. Getting there
+found two real bugs. chaos-operator recorded faults that never ran, and its
+deployment could not start at all. In the first recordings, incident-cli
+ranked the page's own symptoms above the cause in all five scenarios.
+
 **One Prometheus address.** chaos-operator's experiments point at
 `prometheus-operated.monitoring:9090` and the gitops canary analysis points at
 `kube-prometheus-stack-prometheus.monitoring.svc:9090`. Both are services that
@@ -137,10 +149,10 @@ Being explicit about this is the point of the page. Three things are still loose
    GitHub Deployments API, and gitops-platform-demo's promotion workflow opens a
    PR and lets ArgoCD sync without recording a deployment. One API call in the
    promotion job closes this, and it is the highest-value connection left.
-3. **Nothing runs the loop end to end.** Each repo has its own kind-based demo.
-   A `platform-demo` that installs the stack, ships a service, breaks it,
-   watches the SLO react, and triages the result with the CLI is the artifact
-   that would prove all of the above rather than asserting it.
+3. **The loop runs end to end, but not all of it.** platform-mcp's gym
+   installs the stack, ships the service, breaks it, pages, and triages the
+   result. It does not deliver through ArgoCD, and k8s-slo-tracker's daemon is
+   not in it yet, so the SLO side of the loop is still only asserted.
 
 ## Reading this in ten minutes
 
