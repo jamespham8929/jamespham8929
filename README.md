@@ -121,7 +121,10 @@ Prometheus rule pages, and incident-cli ranks the causes through MCP. The gym
 records the raw samples, and CI replays them without a cluster. Getting there
 found two real bugs. chaos-operator recorded faults that never ran, and its
 deployment could not start at all. In the first recordings, incident-cli
-ranked the page's own symptoms above the cause in all five scenarios.
+ranked the page's own symptoms above the cause in all five scenarios. It now
+traces how a failure spreads through the dependency graph, and names all five
+causes first. Those five shaped the fix, so the next scenarios are the real
+test.
 
 **One Prometheus address.** chaos-operator's experiments point at
 `prometheus-operated.monitoring:9090` and the gitops canary analysis points at
