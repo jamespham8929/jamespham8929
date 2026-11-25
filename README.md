@@ -30,6 +30,7 @@ flowchart LR
   SLO -->|"PrometheusRule"| OBS
   PROM -->|"steady-state probe"| CHAOS
   CHAOS -->|"chaos_* run metrics"| PROM
+  CHAOS -->|"run records"| INC
   SLO -->|"gated decisions"| PROM
   PROM -->|"metric anomalies"| INC
   AM -->|"critical → PagerDuty"| INC
@@ -91,6 +92,11 @@ its runs, aborts, and missed schedule slots, so an experiment shows up in the
 stack it is testing. incident-cli reads Prometheus too. A sustained shift in a
 saturation or dependency metric becomes a candidate cause on the timeline.
 
+**One run ID.** Each chaos-operator run leaves a record in the experiment's
+status, with an ID like `payments/nightly/20261124T030005Z`. incident-cli reads
+those records as candidate causes, under the same ID. So a page during a game
+day names the experiment, and the run can be looked up from the timeline.
+
 **One Prometheus address.** chaos-operator's experiments point at
 `prometheus-operated.monitoring:9090` and the gitops canary analysis points at
 `kube-prometheus-stack-prometheus.monitoring.svc:9090`. Both are services that
@@ -106,7 +112,7 @@ terraform-aws-modules provisions.
 
 ## Where they don't line up, yet
 
-Being explicit about this is the point of the page. Four things are still loose:
+Being explicit about this is the point of the page. Three things are still loose:
 
 1. **The two sides still define the error ratio differently.** k8s-slo-tracker
    counts anything that is not a 2xx, observability-bootstrap counts 5xx, so a
@@ -117,10 +123,7 @@ Being explicit about this is the point of the page. Four things are still loose:
    GitHub Deployments API, and gitops-platform-demo's promotion workflow opens a
    PR and lets ArgoCD sync without recording a deployment. One API call in the
    promotion job closes this, and it is the highest-value connection left.
-3. **A chaos run is not an event yet.** chaos-operator exports its runs as
-   metrics, but incident-cli does not read them as candidate causes. An
-   incident caused by a scheduled experiment would be blamed on something else.
-4. **Nothing runs the loop end to end.** Each repo has its own kind-based demo.
+3. **Nothing runs the loop end to end.** Each repo has its own kind-based demo.
    A `platform-demo` that installs the stack, ships a service, breaks it,
    watches the SLO react, and triages the result with the CLI is the artifact
    that would prove all of the above rather than asserting it.
