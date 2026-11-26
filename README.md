@@ -61,7 +61,7 @@ in full further down.
 | [chaos-operator](https://github.com/jamespham8929/chaos-operator) | A chaos operator built safety-first: steady-state verification and blast-radius guards | [ADR 0001](https://github.com/jamespham8929/chaos-operator/blob/main/docs/adr/0001-steady-state-as-a-statistical-claim.md), steady state as a statistical claim |
 | [incident-cli](https://github.com/jamespham8929/incident-cli) | Reconstructs an incident timeline and ranks what probably caused it | `internal/timeline/correlator.go` and the ranking benchmark |
 | [cloud-cost-analyzer](https://github.com/jamespham8929/cloud-cost-analyzer) | Rightsizing that sizes from the recurring peak instead of an average or a p95 | `cloud_cost_analyzer/temporal_rightsizing.py` |
-| [platform-mcp](https://github.com/jamespham8929/platform-mcp) | Read-only MCP tools over the platform, and an incident gym that grades AI investigators on real faults | [ADR 0003](https://github.com/jamespham8929/platform-mcp/blob/main/docs/adr/0003-incident-gym.md), recording incidents on kind and replaying them in CI |
+| [platform-mcp](https://github.com/jamespham8929/platform-mcp) | Read-only MCP tools over the platform, and an incident gym that grades AI investigators on real faults | [ADR 0004](https://github.com/jamespham8929/platform-mcp/blob/main/docs/adr/0004-held-out-results.md), a held-out test of its own fix, with the predictions pushed first |
 
 ## Where the seams line up
 
@@ -123,8 +123,10 @@ found two real bugs. chaos-operator recorded faults that never ran, and its
 deployment could not start at all. In the first recordings, incident-cli
 ranked the page's own symptoms above the cause in all five scenarios. It now
 traces how a failure spreads through the dependency graph, and names all five
-causes first. Those five shaped the fix, so the next scenarios are the real
-test.
+causes first. Those five shaped the fix. On ten held-out scenarios, pushed
+with predictions before they were recorded, it names the cause first in 5 of
+10, and every prediction held. Most misses go one service too deep, because a
+caller's measurement is filed under the service it calls.
 
 **One Prometheus address.** chaos-operator's experiments point at
 `prometheus-operated.monitoring:9090` and the gitops canary analysis points at
